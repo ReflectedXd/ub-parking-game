@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Find a Parking Spot at UB - 2D Arcade Drive</title>
+
+  <!-- NES.css & Google Font -->
+  <link href="https://unpkg.com/nes.css@2.3.0/css/nes.min.css" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    body {
+      font-family: 'Press Start 2P', cursive;
+      background-color: #0f172a;
+      color: #ffffff;
+      user-select: none;
+      overflow-x: hidden;
+    }
+
+    /* CRT scanline effect overlay */
+    .crt::after {
+      content: " ";
+      display: block;
+      position: absolute;
+      top: 0; left: 0; bottom: 0; right: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+      background-size: 100% 4px;
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0.35;
+    }
+
+    canvas {
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    /* Custom touch controls styling */
+    .touch-btn {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-2 md:p-4 bg-slate-950">
+
+  <div id="game-container" class="relative w-full max-w-5xl bg-gray-900 nes-container is-dark with-title rounded-none crt overflow-hidden shadow-2xl p-2 md:p-4">
+    <p class="title text-yellow-400 text-xs md:text-sm">UB PARKING SIMULATOR 2D</p>
+
+    <!-- HEADER / HUD DASHBOARD -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 bg-gray-800 p-2 md:p-3 border-2 border-gray-600 text-[10px] md:text-xs">
+      <div>
+        <span class="text-gray-400 block">⏰ TIME LEFT</span>
+        <span id="hud-time" class="text-yellow-300 font-bold text-xs md:text-sm">45.0s</span>
+      </div>
+      <div>
+        <span class="text-gray-400 block">🤯 STRESS</span>
+        <div class="w-full bg-gray-700 h-3 border border-white mt-1">
+          <div id="hud-stress" class="bg-red-500 h-full transition-all duration-100" style="width: 10%;"></div>
+        </div>
+      </div>
+      <div>
+        <span class="text-gray-400 block">⛽ GAS</span>
+        <div class="w-full bg-gray-700 h-3 border border-white mt-1">
+          <div id="hud-gas" class="bg-green-500 h-full transition-all duration-100" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-gray-400 block">📍 TARGET</span>
+          <span class="text-green-400 font-bold text-[10px] md:text-xs">OPEN SPOT</span>
+        </div>
+        <button id="audio-btn" onclick="toggleAudio()" class="nes-btn is-warning text-[9px] p-1 md:p-2 ml-1">
+          🔊 ON
+        </button>
+      </div>
+    </div>
+
+    <!-- CANVAS VIEWPORT CONTAINER -->
+    <div class="relative w-full aspect-[4/3] max-h-[550px] bg-slate-900 border-4 border-gray-700 overflow-hidden flex items-center justify-center">
+      <canvas id="gameCanvas" width="900" height="600" class="w-full h-full object-contain"></canvas>
+
+      <!-- START OVERLAY -->
+      <div id="start-overlay" class="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-4 text-center z-30">
+        <h1 class="text-lg md:text-2xl text-yellow-400 mb-3 leading-snug">FIND A PARKING SPOT AT UB</h1>
+        <p class="text-xs md:text-sm text-gray-300 max-w-lg mb-6 leading-relaxed">
+          Class at Knox Hall starts in 45 seconds! Drive your car using <strong>WASD</strong> or <strong>ARROW KEYS</strong> to park cleanly inside the glowing <strong>GREEN SPOTS</strong>.
+        </p>
+        <div class="text-[10px] md:text-xs text-cyan-300 mb-6 bg-slate-800 p-3 border border-cyan-500 max-w-md">
+          ⚠️ Watch out for UB police cruisers, icy snowbanks, and moving student traffic!
+        </div>
+        <button onclick="startGame()" class="nes-btn is-success text-xs md:text-sm px-6 py-3">
+          🚀 START DRIVING
+        </button>
+      </div>
+
+      <!-- GAME OVER / RESULTS OVERLAY -->
+      <div id="results-overlay" class="hidden absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-4 text-center z-30">
+        <h2 id="result-title" class="text-lg md:text-2xl text-yellow-400 mb-2">PARKED!</h2>
+        <div id="result-icon" class="text-5xl my-2">🎓</div>
+        <p id="result-msg" class="text-xs md:text-sm text-gray-200 mb-4 max-w-md leading-relaxed">
+          You made it to class on time!
+        </p>
+
+        <!-- SCORE SHEET -->
+        <div class="w-full max-w-md bg-gray-800 p-3 border-2 border-gray-600 text-left text-[10px] md:text-xs space-y-2 mb-6">
+          <div class="flex justify-between">
+            <span class="text-gray-400">Time Remaining:</span>
+            <span id="score-time" class="text-yellow-300 font-bold">0s</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-400">Stress Penalty:</span>
+            <span id="score-stress" class="text-red-400 font-bold">0%</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-400">Park Alignment Accuracy:</span>
+            <span id="score-accuracy" class="text-cyan-300 font-bold">0%</span>
+          </div>
+          <div class="border-t border-gray-600 pt-2 flex justify-between text-xs md:text-sm">
+            <span class="text-white font-bold">TOTAL SCORE:</span>
+            <span id="score-total" class="text-green-400 font-bold">0 PTS</span>
+          </div>
+        </div>
+
+        <button onclick="restartGame()" class="nes-btn is-primary text-xs md:text-sm px-6 py-3">
+          🔄 TRY AGAIN
+        </button>
+      </div>
+    </div>
+
+    <!-- TOUCH CONTROLS FOR MOBILE/TABLETS -->
+    <div class="md:hidden grid grid-cols-3 gap-2 mt-3 pt-2 border-t border-gray-800">
+      <div class="flex flex-col items-center justify-center col-span-1">
+        <button id="btn-up" class="touch-btn nes-btn is-primary text-xs w-12 h-12 mb-1">▲</button>
+        <button id="btn-down" class="touch-btn nes-btn is-primary text-xs w-12 h-12">▼</button>
+      </div>
+      <div class="flex items-center justify-center col-span-1 gap-2">
+        <button id="btn-left" class="touch-btn nes-btn is-primary text-xs w-12 h-12">◀</button>
+        <button id="btn-right" class="touch-btn nes-btn is-primary text-xs w-12 h-12">▶</button>
+      </div>
+      <div class="flex items-center justify-center col-span-1">
+        <span class="text-[9px] text-gray-400 text-center">Use D-Pad to drive & steer</span>
+      </div>
+    </div>
+
+    <!-- INSTRUCTIONS FOOTER -->
+    <div class="mt-3 text-center text-[9px] md:text-[10px] text-gray-500 border-t border-gray-800 pt-2">
+      Controls: Arrow Keys / WASD to accelerate, brake & steer • Built for UB Hacking 2026
+    </div>
+  </div>
+
+  <script>
+    /* ==========================================================================
+       AUDIO SYNTHESIZER (Web Audio API - Pure synthesized sound effects)
+       ========================================================================== */
+    let audioEnabled = true;
+    let audioCtx = null;
+    let engineOsc = null;
+    let engineGain = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function toggleAudio() {
+      audioEnabled = !audioEnabled;
+      const btn = document.getElementById('audio-btn');
+      btn.innerText = audioEnabled ? '🔊 ON' : '🔇 OFF';
+      btn.className = audioEnabled ? 'nes-btn is-warning text-[9px] p-1 md:p-2 ml-1' : 'nes-btn is-error text-[9px] p-1 md:p-2 ml-1';
+      if (!audioEnabled && engineGain) {
+        engineGain.gain.value = 0;
+      }
+    }
+
+    function startEngineSound() {
+      if (!audioEnabled || engineOsc) return;
+      initAudio();
+      try {
+        engineOsc = audioCtx.createOscillator();
+        engineGain = audioCtx.createGain();
+        engineOsc.type = 'sawtooth';
+        engineOsc.frequency.setValueAtTime(50, audioCtx.currentTime);
+        engineGain.gain.setValueAtTime(0.02, audioCtx.currentTime);
+        engineOsc.connect(engineGain);
+        engineGain.connect(audioCtx.destination);
+        engineOsc.start();
+      } catch (e) {}
+    }
+
+    function updateEngineSound(speedRatio) {
+      if (!audioEnabled || !engineOsc || !audioCtx) return;
+      try {
+        const freq = 50 + Math.abs(speedRatio) * 120;
+        engineOsc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.05);
+        engineGain.gain.setTargetAtTime(0.02 + Math.abs(speedRatio) * 0.05, audioCtx.currentTime, 0.05);
+      } catch (e) {}
+    }
+
+    function playSound(type) {
+      if (!audioEnabled) return;
+      initAudio();
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        const now = audioCtx.currentTime;
+
+        if (type === 'crash') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(120, now);
+          osc.frequency.linearRampToValueAtTime(30, now + 0.25);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        } else if (type === 'win') {
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(261.63, now); // C4
+          osc.frequency.setValueAtTime(329.63, now + 0.1); // E4
+          osc.frequency.setValueAtTime(392.00, now + 0.2); // G4
+          osc.frequency.setValueAtTime(523.25, now + 0.3); // C5
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+          osc.start(now);
+          osc.stop(now + 0.5);
+        } else if (type === 'fail') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(200, now);
+          osc.frequency.linearRampToValueAtTime(60, now + 0.4);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+          osc.start(now);
+          osc.stop(now + 0.4);
+        }
+      } catch (e) {}
+    }
+
+    /* ==========================================================================
+       GAME ENGINE & CANVAS SETUP
+       ========================================================================== */
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Key states
+    const keys = {
+      up: false,
+      down: false,
+      left: false,
+      right: false
+    };
+
+    // Keyboard Event Listeners
+    window.addEventListener('keydown', (e) => {
+      if (['ArrowUp', 'KeyW'].includes(e.code)) keys.up = true;
+      if (['ArrowDown', 'KeyS'].includes(e.code)) keys.down = true;
+      if (['ArrowLeft', 'KeyA'].includes(e.code)) keys.left = true;
+      if (['ArrowRight', 'KeyD'].includes(e.code)) keys.right = true;
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (['ArrowUp', 'KeyW'].includes(e.code)) keys.up = false;
+      if (['ArrowDown', 'KeyS'].includes(e.code)) keys.down = false;
+      if (['ArrowLeft', 'KeyA'].includes(e.code)) keys.left = false;
+      if (['ArrowRight', 'KeyD'].includes(e.code)) keys.right = false;
+    });
+
+    // Touch button bindings for mobile
+    function setupTouchButton(id, keyName) {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyName] = true; });
+      btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[keyName] = false; });
+      btn.addEventListener('mousedown', () => { keys[keyName] = true; });
+      btn.addEventListener('mouseup', () => { keys[keyName] = false; });
+    }
+    setupTouchButton('btn-up', 'up');
+    setupTouchButton('btn-down', 'down');
+    setupTouchButton('btn-left', 'left');
+    setupTouchButton('btn-right', 'right');
+
+    /* ==========================================================================
+       WORLD & ENTITY DECLARATIONS
+       ========================================================================== */
+    let gameActive = false;
+    let timer = 45.0;
+    let stress = 10;
+    let gas = 100;
+    let particles = [];
+
+    // Player Car Physics Definition
+    const player = {
+      x: 100,
+      y: 500,
+      width: 24,
+      height: 44,
+      angle: -Math.PI / 2, // Facing Up
+      speed: 0,
+      maxSpeed: 4.2,
+      maxReverseSpeed: -2.0,
+      acceleration: 0.12,
+      friction: 0.96,
+      turnSpeed: 0.045,
+      color: '#3b82f6' // Blue car
+    };
+
+    // Static Parked Cars
+    let staticCars = [];
+
+    // Snowbank Obstacles
+    let snowbanks = [];
+
+    // Dynamic Target Parking Spaces (Green outlines)
+    let parkingSpots = [];
+
+    // Moving Campus Patrol / Traffic Car
+    let patrolCar = {
+      x: 300,
+      y: 180,
+      width: 24,
+      height: 44,
+      vx: 2.2,
+      color: '#ef4444' // Red patrol car
+    };
+
+    function initWorld() {
+      player.x = 80;
+      player.y = 520;
+      player.angle = -Math.PI / 2;
+      player.speed = 0;
+      timer = 45.0;
+      stress = 10;
+      gas = 100;
+      particles = [];
+
+      // Generate static parked cars
+      staticCars = [
+        // Top row lot
+        { x: 220, y: 100, width: 24, height: 44, angle: 0, color: '#64748b' },
+        { x: 280, y: 100, width: 24, height: 44, angle: 0, color: '#94a3b8' },
+        { x: 400, y: 100, width: 24, height: 44, angle: 0, color: '#f59e0b' },
+        { x: 460, y: 100, width: 24, height: 44, angle: 0, color: '#10b981' },
+        { x: 520, y: 100, width: 24, height: 44, angle: 0, color: '#8b5cf6' },
+
+        // Middle row lot (Facing opposite)
+        { x: 220, y: 320, width: 24, height: 44, angle: Math.PI, color: '#ec4899' },
+        { x: 340, y: 320, width: 24, height: 44, angle: Math.PI, color: '#6366f1' },
+        { x: 400, y: 320, width: 24, height: 44, angle: Math.PI, color: '#047857' },
+        { x: 580, y: 320, width: 24, height: 44, angle: Math.PI, color: '#b45309' },
+
+        // Bottom row lot
+        { x: 280, y: 480, width: 24, height: 44, angle: 0, color: '#475569' },
+        { x: 340, y: 480, width: 24, height: 44, angle: 0, color: '#dc2626' },
+        { x: 460, y: 480, width: 24, height: 44, angle: 0, color: '#2563eb' }
+      ];
+
+      // Define Parking Spots (1 or 2 are OPEN target spots)
+      parkingSpots = [
+        { x: 340, y: 100, width: 34, height: 54, occupied: false, target: true }, // OPEN TARGET 1
+        { x: 280, y: 320, width: 34, height: 54, occupied: false, target: true }, // OPEN TARGET 2
+        { x: 520, y: 480, width: 34, height: 54, occupied: false, target: true }  // OPEN TARGET 3
+      ];
+
+      // Snowbanks (Icy corner obstacles)
+      snowbanks = [
+        { x: 0, y: 0, width: 900, height: 35 },   // Top border snow
+        { x: 0, y: 565, width: 900, height: 35 }, // Bottom border snow
+        { x: 0, y: 0, width: 35, height: 600 },   // Left border snow
+        { x: 865, y: 0, width: 35, height: 600 }, // Right border snow
+        { x: 670, y: 180, width: 120, height: 100 }, // Big snow mound east
+        { x: 120, y: 220, width: 70, height: 70 }    // Snow mound west
+      ];
+    }
+
+    /* ==========================================================================
+       PARTICLE SYSTEM (Exhaust, Smoke & Snow FX)
+       ========================================================================== */
+    function createExhaust(x, y, angle) {
+      if (Math.abs(player.speed) < 0.2) return;
+      const backX = x - Math.cos(angle) * (player.height / 2);
+      const backY = y - Math.sin(angle) * (player.height / 2);
+      particles.push({
+        x: backX + (Math.random() - 0.5) * 4,
+        y: backY + (Math.random() - 0.5) * 4,
+        vx: -Math.cos(angle) * 0.5 + (Math.random() - 0.5) * 0.3,
+        vy: -Math.sin(angle) * 0.5 + (Math.random() - 0.5) * 0.3,
+        size: Math.random() * 3 + 2,
+        life: 1.0,
+        color: 'rgba(200, 200, 200, '
+      });
+    }
+
+    function createCrashSpark(x, y) {
+      for (let i = 0; i < 12; i++) {
+        particles.push({
+          x: x,
+          y: y,
+          vx: (Math.random() - 0.5) * 4,
+          vy: (Math.random() - 0.5) * 4,
+          size: Math.random() * 4 + 2,
+          life: 1.0,
+          color: 'rgba(239, 68, 68, '
+        });
+      }
+    }
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.04;
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+        }
+      }
+    }
+
+    function drawParticles() {
+      particles.forEach(p => {
+        ctx.fillStyle = p.color + p.life + ')';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    /* ==========================================================================
+       COLLISION MATH & SAT (Oriented Bounding Box)
+       ========================================================================== */
+    function checkRectOverlap(r1, r2) {
+      return !(r1.x + r1.width < r2.x ||
+               r1.x > r2.x + r2.width ||
+               r1.y + r1.height < r2.y ||
+               r1.y > r2.y + r2.width);
+    }
+
+    // Simplified Bounding Circle for Vehicle Collision
+    function getVehicleCircle(v) {
+      return { x: v.x, y: v.y, radius: 16 };
+    }
+
+    function checkVehicleCollision(c1, c2) {
+      const dx = c1.x - c2.x;
+      const dy = c1.y - c2.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      return dist < (c1.radius + c2.radius);
+    }
+
+    /* ==========================================================================
+       UPDATE LOGIC
+       ========================================================================== */
+    let lastTime = performance.now();
+
+    function updateGame(dt) {
+      if (!gameActive) return;
+
+      // Update Timer
+      timer -= dt;
+      if (timer <= 0) {
+        timer = 0;
+        triggerGameOver(false, "TIME EXPIRED! You missed your exam at Knox Hall.");
+        return;
+      }
+
+      // Update Gas
+      if (Math.abs(player.speed) > 0.1) {
+        gas -= dt * 1.5;
+        if (gas <= 0) {
+          gas = 0;
+          triggerGameOver(false, "OUT OF GAS! Your car sputtered on North Campus.");
+          return;
+        }
+      }
+
+      // Player Steering & Acceleration
+      if (keys.up) {
+        player.speed = Math.min(player.maxSpeed, player.speed + player.acceleration);
+      } else if (keys.down) {
+        player.speed = Math.max(player.maxReverseSpeed, player.speed - player.acceleration);
+      } else {
+        player.speed *= player.friction;
+      }
+
+      // Steering (Reverse flips steer direction naturally)
+      if (Math.abs(player.speed) > 0.1) {
+        const turnDir = player.speed > 0 ? 1 : -1;
+        if (keys.left) player.angle -= player.turnSpeed * turnDir;
+        if (keys.right) player.angle += player.turnSpeed * turnDir;
+      }
+
+      // Update Position
+      const nextX = player.x + Math.cos(player.angle) * player.speed;
+      const nextY = player.y + Math.sin(player.angle) * player.speed;
+
+      player.x = nextX;
+      player.y = nextY;
+
+      // Sound update
+      updateEngineSound(player.speed / player.maxSpeed);
+
+      // Particle Exhaust
+      createExhaust(player.x, player.y, player.angle);
+      updateParticles();
+
+      // Patrol car movement
+      patrolCar.x += patrolCar.vx;
+      if (patrolCar.x > 750 || patrolCar.x < 180) {
+        patrolCar.vx *= -1;
+      }
+
+      // 1. Collisions with Snowbanks
+      const playerCircle = getVehicleCircle(player);
+      for (let sb of snowbanks) {
+        if (player.x + 12 > sb.x && player.x - 12 < sb.x + sb.width &&
+            player.y + 12 > sb.y && player.y - 12 < sb.y + sb.height) {
+          
+          // Bounce back & increase stress
+          player.speed = -player.speed * 0.6;
+          stress = Math.min(100, stress + 8);
+          createCrashSpark(player.x, player.y);
+          playSound('crash');
+          break;
+        }
+      }
+
+      // 2. Collisions with Static Parked Cars
+      for (let sc of staticCars) {
+        const scCircle = getVehicleCircle(sc);
+        if (checkVehicleCollision(playerCircle, scCircle)) {
+          player.speed = -player.speed * 0.7;
+          stress = Math.min(100, stress + 12);
+          createCrashSpark(player.x, player.y);
+          playSound('crash');
+          break;
+        }
+      }
+
+      // 3. Collision with Patrol Car
+      if (checkVehicleCollision(playerCircle, getVehicleCircle(patrolCar))) {
+        player.speed = -player.speed * 0.8;
+        stress = Math.min(100, stress + 20);
+        createCrashSpark(player.x, player.y);
+        playSound('crash');
+      }
+
+      // Stress Limit Check
+      if (stress >= 100) {
+        triggerGameOver(false, "MAX STRESS REACHED! You raged and drove home.");
+        return;
+      }
+
+      // 4. CHECK WIN CONDITION (Parked in Open Target Spot)
+      parkingSpots.forEach(spot => {
+        if (spot.target) {
+          const inX = player.x > spot.x - 15 && player.x < spot.x + spot.width + 15;
+          const inY = player.y > spot.y - 15 && player.y < spot.y + spot.height + 15;
+          
+          // Car must be nearly stopped and aligned vertically or horizontally
+          if (inX && inY && Math.abs(player.speed) < 0.25) {
+            // Check orientation alignment (facing up or down close to PI/2)
+            const normAngle = Math.abs(player.angle % Math.PI);
+            const isAligned = normAngle < 0.4 || Math.abs(normAngle - Math.PI) < 0.4;
+            
+            if (isAligned) {
+              triggerGameOver(true, "PARKED PERFECTLY! You made it to Knox Hall on time!");
+            }
+          }
+        }
+      });
+
+      // Update HUD elements
+      document.getElementById('hud-time').innerText = `${timer.toFixed(1)}s`;
+      document.getElementById('hud-stress').style.width = `${stress}%`;
+      document.getElementById('hud-gas').style.width = `${gas}%`;
+    }
+
+    /* ==========================================================================
+       RENDER / DRAWING ENGINE
+       ========================================================================== */
+    function drawCar(x, y, angle, width, height, color, isPlayer = false) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle + Math.PI / 2); // Orient car model upward
+
+      // Car shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(-width / 2 + 3, -height / 2 + 3, width, height);
+
+      // Car body
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(-width / 2, -height / 2, width, height, [4]);
+      ctx.fill();
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Roof / Windshield
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(-width / 2 + 3, -height / 2 + 10, width - 6, height - 20);
+
+      // Headlights (Yellow)
+      ctx.fillStyle = '#fde047';
+      ctx.fillRect(-width / 2 + 2, -height / 2 + 1, 5, 3);
+      ctx.fillRect(width / 2 - 7, -height / 2 + 1, 5, 3);
+
+      // Taillights (Red)
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(-width / 2 + 2, height / 2 - 4, 5, 3);
+      ctx.fillRect(width / 2 - 7, height / 2 - 4, 5, 3);
+
+      if (isPlayer) {
+        // Driver indicator arrow
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.moveTo(0, -height / 2 - 8);
+        ctx.lineTo(-5, -height / 2 - 2);
+        ctx.lineTo(5, -height / 2 - 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    function render() {
+      // Clear Asphalt Canvas
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Parking Space Lines
+      ctx.strokeStyle = '#f59e0b'; // Yellow parking lines
+      ctx.lineWidth = 3;
+
+      // Draw Parking Rows
+      parkingSpots.forEach(spot => {
+        if (spot.target) {
+          // Highlight target open spot with green pulse
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.25)';
+          ctx.fillRect(spot.x - 12, spot.y - 20, spot.width, spot.height);
+          ctx.strokeStyle = '#22c55e';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(spot.x - 12, spot.y - 20, spot.width, spot.height);
+
+          // "PARK HERE" text overlay
+          ctx.fillStyle = '#4ade80';
+          ctx.font = '8px "Press Start 2P"';
+          ctx.fillText('PARK', spot.x - 8, spot.y + 5);
+        } else {
+          ctx.strokeStyle = '#94a3b8';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(spot.x - 12, spot.y - 20, spot.width, spot.height);
+        }
+      });
+
+      // Draw Snowbanks (Obstacles)
+      snowbanks.forEach(sb => {
+        ctx.fillStyle = '#e2e8f0'; // Snowy white/light gray
+        ctx.fillRect(sb.x, sb.y, sb.width, sb.height);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(sb.x + 2, sb.y + 2, sb.width - 4, sb.height - 4);
+      });
+
+      // Draw Particles
+      drawParticles();
+
+      // Draw Static Cars
+      staticCars.forEach(sc => {
+        drawCar(sc.x, sc.y, sc.angle, sc.width, sc.height, sc.color);
+      });
+
+      // Draw Moving Patrol Car
+      drawCar(patrolCar.x, patrolCar.y, 0, patrolCar.width, patrolCar.height, patrolCar.color);
+      // Siren Light FX
+      ctx.fillStyle = (Math.floor(Date.now() / 200) % 2 === 0) ? '#3b82f6' : '#ef4444';
+      ctx.beginPath();
+      ctx.arc(patrolCar.x, patrolCar.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw Player Car
+      drawCar(player.x, player.y, player.angle, player.width, player.height, player.color, true);
+
+      // Campus Signpost Banner
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(340, 10, 220, 24);
+      ctx.strokeStyle = '#38bdf8';
+      ctx.strokeRect(340, 10, 220, 24);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = '9px "Press Start 2P"';
+      ctx.fillText('UB FLINT LOT - ZONE A', 350, 26);
+    }
+
+    /* ==========================================================================
+       GAME LOOP & OVERLAYS
+       ========================================================================== */
+    function gameLoop(now) {
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      updateGame(Math.min(dt, 0.1)); // Cap delta time
+      render();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function startGame() {
+      initWorld();
+      startEngineSound();
+      gameActive = true;
+      document.getElementById('start-overlay').classList.add('hidden');
+      document.getElementById('results-overlay').classList.add('hidden');
+    }
+
+    function triggerGameOver(isWin, message) {
+      gameActive = false;
+      if (engineGain) engineGain.gain.value = 0;
+
+      const overlay = document.getElementById('results-overlay');
+      const title = document.getElementById('result-title');
+      const icon = document.getElementById('result-icon');
+      const msg = document.getElementById('result-msg');
+
+      overlay.classList.remove('hidden');
+
+      if (isWin) {
+        playSound('win');
+        title.innerText = "SUCCESSFULLY PARKED!";
+        title.className = "text-lg md:text-2xl text-green-400 mb-2";
+        icon.innerText = "🎓🏆";
+        msg.innerText = message;
+
+        // Calculate score
+        const timeBonus = Math.floor(timer * 25);
+        const stressPenalty = Math.floor(stress * 10);
+        const totalScore = Math.max(50, 1000 + timeBonus - stressPenalty);
+
+        document.getElementById('score-time').innerText = `${timer.toFixed(1)}s (+${timeBonus} pts)`;
+        document.getElementById('score-stress').innerText = `${stress}% (-${stressPenalty} pts)`;
+        document.getElementById('score-accuracy').innerText = '96%';
+        document.getElementById('score-total').innerText = `${totalScore} PTS`;
+      } else {
+        playSound('fail');
+        title.innerText = "PARKING FAILED!";
+        title.className = "text-lg md:text-2xl text-red-500 mb-2";
+        icon.innerText = "🚓❄️";
+        msg.innerText = message;
+
+        document.getElementById('score-time').innerText = '0s';
+        document.getElementById('score-stress').innerText = `${stress}%`;
+        document.getElementById('score-accuracy').innerText = '0%';
+        document.getElementById('score-total').innerText = '0 PTS';
+      }
+    }
+
+    function restartGame() {
+      startGame();
+    }
+
+    // Start render loop on window load
+    window.onload = () => {
+      requestAnimationFrame(gameLoop);
+    };
+  </script>
+</body>
+</html>
