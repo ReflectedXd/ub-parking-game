@@ -95,7 +95,7 @@
   }
   canvas { width: 100%; height: 100%; display: block; }
 
-  /* Active Power-Up Banner */
+  /* Active Power-Up */
   #powerup-hud {
     display: none;
     text-align: center;
@@ -108,7 +108,7 @@
     box-shadow: 0 0 12px rgba(255, 165, 2, 0.3);
   }
 
-  /* Undertale Bottom Dialogue Box */
+  /* Bottom Dialogue Box */
   #undertale-box {
     position: absolute;
     bottom: 10px;
@@ -130,7 +130,7 @@
   }
   #undertale-box.hidden { display: none; }
 
-  /* 8-Bit Professor Portrait Pop-out */
+  /* Professor Portrait */
   .prof-portrait {
     position: absolute;
     bottom: 100%;
@@ -256,14 +256,14 @@
   .buy:disabled { opacity: .4; cursor: not-allowed; }
   .buy.maxed { background: var(--green); box-shadow: 0 3px 0 #1f9d55; opacity: 1; }
 
-  /* Key legend */
+  /* Key */
   .legend { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; font-size: 7px; color: var(--muted); }
   .legend kbd {
     font-family: inherit; background: var(--panel-2); border: 1px solid var(--line);
     padding: 3px 5px; color: var(--text); margin-right: 3px; border-radius: 3px;
   }
 
-  /* Arcade Touch Controls Styling */
+  /* Controls Styling */
   #touch { display: none; justify-content: space-between; gap: 8px; touch-action: none; margin-top: 2px; }
   .pad { display: flex; gap: 6px; }
   #touch button {
@@ -324,9 +324,9 @@
   <div id="stage">
     <canvas id="gameCanvas"></canvas>
     
-    <!-- Undertale Bottom Dialogue Box -->
+    <!--  Bottom Dialogue Box -->
     <div id="undertale-box" class="hidden">
-      <!-- 8-Bit Professor Sprite -->
+      <!--Professor Sprite -->
       <div class="prof-portrait" id="prof-portrait">
         <svg width="60" height="60" viewBox="0 0 24 24" shape-rendering="crispEdges">
           <rect x="7" y="1" width="10" height="2" fill="#ffffff"/>
@@ -719,7 +719,7 @@ function loadSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) Object.assign(s, JSON.parse(raw));
   } catch (e) {}
-  // Story always starts fresh on page load (wallet, upgrades and best score are kept)
+  // Story always starts fresh on page load 
   s.storyReached = 0;
   s.storyCleared = false;
   return s;
@@ -855,7 +855,7 @@ let dialogLines = [], dialogIndex = 0, dialogCallback = null;
 const player = { x: 450, y: 486, angle: 0, speed: 0, boost: false };
 const input = { up: false, down: false, left: false, right: false, brake: false, nitro: false };
 
-/* Undertale Dialogue System */
+/*  Dialogue System */
 function startUndertaleDialogue(speaker, lines, onComplete) {
   dialogLines = lines;
   dialogIndex = 0;
