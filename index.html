@@ -719,6 +719,9 @@ function loadSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) Object.assign(s, JSON.parse(raw));
   } catch (e) {}
+  // Story always starts fresh on page load (wallet, upgrades and best score are kept)
+  s.storyReached = 0;
+  s.storyCleared = false;
   return s;
 }
 let save = loadSave();
@@ -903,8 +906,8 @@ function buildLot(openStart) {
 const openCount = () => spots.filter(s => !s.occupied && !s.wreck).length;
 
 /* Pedestrians (Students) */
-function spawnPedestrians(count) {
-  peds = [];
+function spawnPedestrians(count, append) {
+  if (!append) peds = [];
   const PCOLORS = ['#1e90ff', '#70a1ff', '#ffa502', '#2ed573', '#ff4757'];
   for (let i = 0; i < count; i++) {
     peds.push({
@@ -1171,7 +1174,7 @@ function beginChapter() {
   buildLot(c.openStart);
   spawnTrafficCones();
   rivals = Array.from({length: cfg.rivals}, (_, i) => makeRival(i * 1.0));
-  spawnPedestrians(4 + chapter);
+  spawnPedestrians(c.boss ? 16 : 4 + chapter);
   player.x = 450; player.y = 486; player.speed = 0; player.angle = 0;
   powerups = []; activePowerup = null;
 
@@ -1195,7 +1198,7 @@ function beginEndless() {
   buildLot(2);
   spawnTrafficCones();
   rivals = [makeRival(0.3), makeRival(1.0), makeRival(1.6)];
-  spawnPedestrians(6);
+  spawnPedestrians(10);
   player.x = 450; player.y = 486; player.speed = 0; player.angle = 0;
   powerups = []; activePowerup = null;
 
@@ -1285,6 +1288,7 @@ function parkSuccess(s) {
         currentMap = level % 3 === 1 ? MAPS.ELLICOTT : level % 3 === 2 ? MAPS.DAVIS : MAPS.GOVERNORS;
         cfg.rivalSpeed += 0.3; cfg.spawnMin = Math.max(0.4, cfg.spawnMin - 0.1);
         timeLeft = Math.min(60, timeLeft + 15);
+        if (peds.length < 24) spawnPedestrians(2, true);
         if (level >= 3 && !boss) { boss = makeBoss(false); sfx.crash(); }
         floatText(W/2, H/2, 'LEVEL ' + level + ' - ' + currentMap.name, '#ffa502', 18);
         state = 'PLAYING';
